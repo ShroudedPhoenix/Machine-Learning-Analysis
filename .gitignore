@@ -185,3 +185,8 @@ cython_debug/
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+data/*.csv
+import/*.csv
+models/*.pkl
+models/*.h5
