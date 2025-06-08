@@ -9,7 +9,7 @@ def main():
     data_folder = r'data'
 
     data_import.combine_data()
-    # machine_learning.ML_run()
+    machine_learning.ML_run()
     predictions.run_predictions()
 
     print("Process complete.")

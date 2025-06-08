@@ -1,18 +1,32 @@
 import pandas as pd
 import os
+import datetime as dt
+import numpy as np
 
 
-def load_csv(file_path):
-    # Load the first 5 columns of the CSV file
-    data = pd.read_csv(file_path, usecols=[0, 1, 2, 3, 4])
+def load_csv(path):
+    df = pd.read_csv(path, usecols=[0, 1, 2, 3, 4])
 
-    # Ensure the first column is loaded as dates
-    data['time'] = pd.to_datetime(data['time'], utc=False)
+    raw = df['time'].astype(str).str.strip()
 
-    # Ensure the rows are sorted by the time column
-    data = data.sort_values(by='time')
+    # numeric bits to Unix seconds to UTC
+    as_num = pd.to_numeric(raw, errors='coerce')
+    ts_num = pd.to_datetime(as_num, unit='s', utc=True)
 
-    return data
+    # string bits to normal parse to UTC
+    ts_str = pd.to_datetime(raw, utc=True, errors='coerce')
+
+    # stitch to pure datetime64[ns, UTC]
+    ts_final = ts_num.combine_first(ts_str)
+
+    # convert to Central and drop tz tag
+    df['time'] = (
+        ts_final
+        .dt.tz_convert('America/Chicago')
+        .dt.tz_localize(None)
+    )
+
+    return df.sort_values('time')
 
 
 def calculate_rsi(data, periods):
