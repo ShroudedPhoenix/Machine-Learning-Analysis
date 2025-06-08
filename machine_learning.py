@@ -5,6 +5,7 @@ from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential  # type: ignore
 from tensorflow.keras.layers import Dense, Dropout  # type: ignore
 from tensorflow.keras.optimizers import Adam  # type: ignore
+from tensorflow.keras.callbacks import EarlyStopping  # type: ignore
 import joblib
 
 
@@ -16,13 +17,8 @@ def ML_run():
     for file in os.listdir(data_dir):
         if file.endswith(".csv"):
             # Load the data
-            data = pd.read_csv(os.path.join(data_dir, file))
-
-            # Ensure the rows are sorted by the time column
-            data = data.sort_values(by='time')
-
-            # Drop duplicates and missing values
-            data = data.drop_duplicates().dropna()
+            data = pd.read_csv(os.path.join(data_dir, file)).sort_values(
+                by='time').drop_duplicates().dropna()
 
             # Define feature columns
             feature_columns = ['open', 'high', 'low', 'close'] + [f'RSI_{i}' for i in range(5, 22)] + \
@@ -33,18 +29,24 @@ def ML_run():
             feature_columns = [
                 col for col in feature_columns if col in data.columns]
 
+            data['target'] = data['close'].shift(-1)
+            data = data.dropna(subset=['target'])
+
+            split = int(len(data) * 0.8)
+            X_train_raw, X_test_raw = data[feature_columns][:
+                                                            split], data[feature_columns][split:]
+            y_train_raw, y_test_raw = data[[
+                'target']][:split],      data[['target']][split:]
+
             # Initialize scalers
             scaler_X = MinMaxScaler()
             scaler_y = MinMaxScaler()
 
-            # Create the input and output data
-            X = scaler_X.fit_transform(data[feature_columns])
-            y = scaler_y.fit_transform(data[['close']])
-
             # Split the data into training and testing sets
-            split = int(len(data) * 0.8)
-            X_train, X_test = X[:split], X[split:]
-            y_train, y_test = y[:split], y[split:]
+            X_train = scaler_X.fit_transform(X_train_raw)
+            X_test = scaler_X.transform(X_test_raw)
+            y_train = scaler_y.fit_transform(y_train_raw)
+            y_test = scaler_y.transform(y_test_raw)
 
             # Create the model
             model = Sequential()
@@ -60,19 +62,19 @@ def ML_run():
                           optimizer=Adam(learning_rate=0.0005))
 
             # Train the model
+            es = EarlyStopping(patience=10, restore_best_weights=True)
             model.fit(X_train, y_train, epochs=100, batch_size=64,
-                      validation_data=(X_test, y_test))
+                      validation_data=(X_test, y_test), callbacks=[es])
 
             # Evaluate the model
-            loss = model.evaluate(X_test, y_test)
+            loss = model.evaluate(X_test, y_test, verbose=0)
             print(f"Loss for {file}: {loss}")
 
             # Save the model and scalers
-            model_path = os.path.join(model_dir, f"{file[:12]}.h5")
-            model.save(model_path)
+            tag = os.path.splitext(file)[0][:12]          # first 12 chars
+            model.save(os.path.join(model_dir, f'{tag}.h5'))
             joblib.dump(scaler_X, os.path.join(
-                model_dir, f"{file[:12]}_scaler_X.pkl"))
+                model_dir, f'{tag}_scaler_X.pkl'))
             joblib.dump(scaler_y, os.path.join(
-                model_dir, f"{file[:12]}_scaler_y.pkl"))
-
-            print(f"Saved model and scalers for {file[:12]}")
+                model_dir, f'{tag}_scaler_y.pkl'))
+            print(f'Saved model and scalers for {tag}')
